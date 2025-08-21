@@ -258,9 +258,9 @@ app.get('/host', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Trivia server running on http://localhost:${PORT}`);
-  console.log(`Player page: http://localhost:${PORT}/player`);
-  console.log(`Host page:   http://localhost:${PORT}/host`);
+  console.log(`Trivia server running on port ${PORT}`);
+  console.log(`Player page: /player`);
+  console.log(`Host page:   /host`);
 });
 
 function stopTimer() {
