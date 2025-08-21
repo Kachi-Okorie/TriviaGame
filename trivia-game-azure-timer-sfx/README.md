@@ -95,4 +95,4 @@ echo "Player: https://$WEBAPP.azurewebsites.net/player"
 ### Notes
 - This app listens on `process.env.PORT` (used by Azure). No extra config needed.
 - If players are on a different domain, ensure CORS and HTTPS are enabled (already default).
-- For larger scale or regional redundancy, consider Azure Front Door + multiple Web Apps.
+- For larger scale or regional redundancy, consider Azure Front Door + multiple Web Apps. New push
