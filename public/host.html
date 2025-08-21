@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Host | Trivia</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/socket.io/socket.io.js">
+socket.on('timer:tick', (remaining) => {
+  timerEl.textContent = remaining;
+  if (remaining <= 3 && remaining > 0) { sndBeep.currentTime = 0; sndBeep.play().catch(()=>{}); }
+});
+socket.on('timer:ended', () => { sndReveal.play().catch(()=>{}); });
+
+</script>
+</head>
+<body>
+  <div class="container">
+    <h1>🖥️ Host Dashboard</h1>
+    <audio id="sndBeep" src="/sfx/beep.wav" preload="auto"></audio>
+    <audio id="sndReveal" src="/sfx/reveal.wav" preload="auto"></audio>
+    <div class="row">
+      <button class="btn" id="startBtn">Start Game</button>
+      <button class="btn" id="prevBtn">⟵ Prev</button>
+      <button class="btn" id="nextBtn">Next ⟶</button>
+      <button class="btn btn-secondary" id="revealBtn">Reveal & Score</button>
+      <button class="btn btn-secondary" id="resetBuzzBtn">Reset Buzz</button>
+      <button class="btn btn-secondary" id="reloadQBtn">Reload Questions</button>
+    </div>
+
+    <div class="card">
+      <h2 id="qText">No question yet</h2>
+      <div id="options" class="grid grid-2"></div>
+      <p class="muted small">Q <span id="qNum">0</span>/<span id="qTotal">0</span> — Phase: <span id="phaseLabel">lobby</span> — ⏱️ <strong id="timer">—</strong>s</p>
+      <p class="muted small">Buzzed by: <span id="buzzedBy">—</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Live Answers</h3>
+      <ul id="answersList" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>Scoreboard</h3>
+      <div id="scoreboard"></div>
+    </div>
+  </div>
+
+<script>
+const socket = io({ query: { role: 'host' } });
+let hostState = null;
+
+const startBtn = document.getElementById('startBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const revealBtn = document.getElementById('revealBtn');
+const resetBuzzBtn = document.getElementById('resetBuzzBtn');
+const reloadQBtn = document.getElementById('reloadQBtn');
+
+const qText = document.getElementById('qText');
+const optionsDiv = document.getElementById('options');
+const qNum = document.getElementById('qNum');
+const qTotal = document.getElementById('qTotal');
+const phaseLabel = document.getElementById('phaseLabel');
+const buzzedBy = document.getElementById('buzzedBy');
+const answersList = document.getElementById('answersList');
+const scoreboard = document.getElementById('scoreboard');
+const timerEl = document.getElementById('timer');
+const sndBeep = document.getElementById('sndBeep');
+const sndReveal = document.getElementById('sndReveal');
+
+startBtn.onclick = () => socket.emit('host:start');
+prevBtn.onclick = () => socket.emit('host:prev');
+nextBtn.onclick = () => socket.emit('host:next');
+revealBtn.onclick = () => socket.emit('host:reveal');
+resetBuzzBtn.onclick = () => socket.emit('host:resetBuzz');
+reloadQBtn.onclick = () => socket.emit('host:reloadQuestions');
+
+socket.on('host:connected', () => {
+  // connected as host
+});
+
+socket.on('host:update', (state) => {
+  hostState = state;
+  renderHost();
+});
+
+socket.on('host:answerUpdate', ({ id, name, answer }) => {
+  // Update inline without waiting for full refresh
+  const li = document.querySelector(`li[data-id="${id}"]`);
+  if (li) {
+    li.querySelector('.ans').textContent = answer || '—';
+  } else {
+    const el = document.createElement('li');
+    el.dataset.id = id;
+    el.innerHTML = `<strong>${name}</strong>: <span class="ans">${answer || '—'}</span>`;
+    answersList.appendChild(el);
+  }
+});
+
+function renderHost() {
+  phaseLabel.textContent = hostState.phase;
+  qNum.textContent = (hostState.qIndex + 1);
+  qTotal.textContent = hostState.questionCount;
+  buzzedBy.textContent = '—';
+  if (hostState.buzzedBy) {
+    const p = hostState.playerAnswers.find(p => p.id === hostState.buzzedBy);
+    if (p) buzzedBy.textContent = p.name;
+  }
+
+  // Question
+  const q = hostState.currentQuestion;
+  if (q) {
+    qText.textContent = q.text;
+    optionsDiv.innerHTML = '';
+    for (const key of ['A','B','C','D']) {
+      const div = document.createElement('div');
+      div.className = 'option';
+      div.dataset.val = key;
+      div.innerHTML = `<strong>${key}.</strong> ${q.options[key]}`;
+      if (hostState.phase === 'reveal' && q.correct === key) {
+        div.classList.add('correct');
+      }
+      optionsDiv.appendChild(div);
+    }
+  } else {
+    qText.textContent = 'No question loaded.';
+    optionsDiv.innerHTML = '';
+  }
+
+  // Answers list
+  answersList.innerHTML = '';
+  hostState.playerAnswers.forEach(p => {
+    const li = document.createElement('li');
+    li.dataset.id = p.id;
+    li.innerHTML = `<strong>${p.name}</strong>: <span class="ans">${p.answer || '—'}</span>`;
+    answersList.appendChild(li);
+  });
+
+  // Scoreboard
+  scoreboard.innerHTML = '';
+  const wrapper = document.createElement('div');
+  wrapper.className = 'scoreboard';
+  hostState.playerAnswers.forEach(p => {
+    const pl = hostState.players.find(pp => pp.id === p.id) || { score: 0 };
+    const row = document.createElement('div');
+    row.className = 'scoreboard';
+    row.innerHTML = `
+      <div>${p.name}</div>
+      <input type="number" data-id="${p.id}" value="${pl.score}" class="scoreInput">
+      <button class="btn btn-secondary setScoreBtn" data-id="${p.id}">Set</button>
+    `;
+    scoreboard.appendChild(row);
+  });
+
+  document.querySelectorAll('.setScoreBtn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.target.dataset.id;
+      const input = document.querySelector(`input.scoreInput[data-id="${id}"]`);
+      socket.emit('host:setScore', { playerId: id, score: input.value });
+    });
+  });
+}
+
+socket.on('timer:tick', (remaining) => {
+  timerEl.textContent = remaining;
+  if (remaining <= 3 && remaining > 0) { sndBeep.currentTime = 0; sndBeep.play().catch(()=>{}); }
+});
+socket.on('timer:ended', () => { sndReveal.play().catch(()=>{}); });
+
+</script>
+</body>
+</html>
